@@ -7,7 +7,6 @@ build-*/
 
 *.o
 *.so
-*.a
 *.lib
 *.dll
 *.exe
