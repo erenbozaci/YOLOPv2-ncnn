@@ -56,9 +56,10 @@ static void slice(const ncnn::Mat& in, ncnn::Mat& out, int start, int end, int a
 static void interp(const ncnn::Mat& in, const float& scale, const int& out_w, const int& out_h, ncnn::Mat& out)
 {
     ncnn::Option opt;
-    opt.num_threads = 4;
+    opt.num_threads = 8;
     opt.use_fp16_storage = false;
-    opt.use_packing_layout = false;
+    opt.use_fp16_arithmetic = true; 
+    opt.use_packing_layout = true;
 
     ncnn::Layer* op = ncnn::create_layer("Interp");
 
@@ -310,14 +311,20 @@ static void draw_objects(const cv::Mat& bgr, const std::vector<Object>& objects,
             }
         }
     }
-    cv::imwrite("result.jpg", image);
     cv::imshow("result", image);
-    cv::waitKey();
+    cv::waitKey(1);
 }
 
 static int detect_yolopv2( cv::Mat& bgr, std::vector<Object>& objects, ncnn::Mat& da_seg_mask_, ncnn::Mat&  ll_seg_mask_)
 {
     ncnn::Net yolopv2;
+
+    if (ncnn::get_gpu_count() == 0) {
+        printf("Error: No Vulkan-capable GPU found.\n");
+        return -1;
+    }
+
+    printf("GPU Count: %d\n", ncnn::get_gpu_count());
 
     yolopv2.load_param("../models/yolopv2.param");
     yolopv2.load_model("../models/yolopv2.bin");
@@ -472,23 +479,33 @@ int main(int argc, char** argv)
 {
     if (argc != 2)
     {
-        fprintf(stderr, "Usage: %s [imagepath]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [videopath]\n", argv[0]);
         return -1;
     }
 
-    const char* imagepath = argv[1];
+    const char* videopath = argv[1];
 
-    cv::Mat m = cv::imread(imagepath, 1);
-    if (m.empty())
+    cv::VideoCapture cap(videopath);
+
+    if (!cap.isOpened())
     {
-        fprintf(stderr, "cv::imread %s failed\n", imagepath);
+        fprintf(stderr, "cv::VideoCapture %s failed\n", videopath);
         return -1;
     }
-    
-    std::vector<Object> objects;
-    ncnn::Mat da_seg_mask, ll_seg_mask;
-    detect_yolopv2(m, objects, da_seg_mask, ll_seg_mask);
-    draw_objects(m, objects,da_seg_mask, ll_seg_mask);
 
+    cv::Mat m;
+    while (cap.read(m))
+    {
+        if (m.empty())
+        {
+            fprintf(stderr, "cv::imread %s failed\n", videopath);
+        }
+        cv::Mat resized;
+        cv::resize(m, resized, cv::Size(1280, 768));
+        std::vector<Object> objects;
+        ncnn::Mat da_seg_mask, ll_seg_mask;
+        detect_yolopv2(resized, objects, da_seg_mask, ll_seg_mask);
+        draw_objects(resized, objects, da_seg_mask, ll_seg_mask);
+    }
     return 0;
 }

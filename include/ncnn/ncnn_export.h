@@ -33,10 +33,11 @@
 #  define NCNN_DEPRECATED_NO_EXPORT NCNN_NO_EXPORT NCNN_DEPRECATED
 #endif
 
+/* NOLINTNEXTLINE(readability-avoid-unconditional-preprocessor-if) */
 #if 0 /* DEFINE_NO_DEPRECATED */
 #  ifndef NCNN_NO_DEPRECATED
 #    define NCNN_NO_DEPRECATED
 #  endif
 #endif
 
-#endif
+#endif /* NCNN_EXPORT_H */

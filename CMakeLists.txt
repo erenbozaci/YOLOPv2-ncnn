@@ -1,8 +1,10 @@
 cmake_minimum_required(VERSION 3.5)
 project(yolopv2_ncnn)
+
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pie -fPIE -fPIC -Wall")
 
+# OpenCV
 find_package(OpenCV REQUIRED)
 if (OpenCV_FOUND)
     message(STATUS "OpenCV_LIBS: ${OpenCV_LIBS}")
@@ -11,6 +13,7 @@ else ()
     message(FATAL_ERROR "opencv Not Found!")
 endif (OpenCV_FOUND)
 
+# OpenMP
 find_package(OpenMP REQUIRED)
 if (OPENMP_FOUND)
     message("OPENMP FOUND")
@@ -21,9 +24,28 @@ else ()
     message(FATAL_ERROR "OpenMP Not Found!")
 endif ()
 
+# Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/ncnn)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/glslang)
+
+# Library directories
 link_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib)
 
+# glslang library linking
+set(GLSLANG_LIBS
+    libglslang.a
+    libMachineIndependent.a
+    libGenericCodeGen.a
+    libOSDependent.a
+    libOGLCompiler.a
+    libSPIRV.a
+    libHLSL.a
+    libglslang-default-resource-limits.a
+)
+
+# Executable
 add_executable(yolopv2_ncnn src/yolopv2.cpp)
-target_link_libraries(yolopv2_ncnn ncnn ${OpenCV_LIBS})
+
+# Link libraries
+target_link_libraries(yolopv2_ncnn ncnn ${OpenCV_LIBS} ${GLSLANG_LIBS} pthread)

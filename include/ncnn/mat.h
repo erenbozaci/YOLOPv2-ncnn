@@ -29,22 +29,17 @@
 #if __mips_msa
 #include <msa.h>
 #endif
-#if __riscv_vector
-#ifdef RVV_SPEC_0_7
-#include "layer/riscv/riscv_v_071_fix.h"
-#else
-#include <riscv_vector.h>
+#if __loongarch_sx
+#include <lsxintrin.h>
 #endif
+#if __riscv_vector
+#include <riscv_vector.h>
 #include "cpu.h" // cpu_riscv_vlenb()
 #endif
 
 #include "allocator.h"
 #include "option.h"
 #include "platform.h"
-
-#if NCNN_VULKAN
-#include <vulkan/vulkan.h>
-#endif // NCNN_VULKAN
 
 #if NCNN_PIXEL
 #if NCNN_PLATFORM_API
@@ -112,11 +107,15 @@ public:
 #if __ARM_NEON
     void fill(float32x4_t _v);
     void fill(uint16x4_t _v);
+#if !defined(_MSC_VER)
     void fill(int32x4_t _v);
+#endif
     void fill(int32x4_t _v0, int32x4_t _v1);
 #if __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
+#if !defined(_MSC_VER)
     void fill(float16x4_t _v);
     void fill(float16x8_t _v);
+#endif
 #endif // __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
 #endif // __ARM_NEON
 #if __SSE2__
@@ -124,7 +123,7 @@ public:
 #if __AVX512F__
     void fill(__m512 _v);
 #endif // __AVX512F__
-    void fill(__m256 _v);
+    void fill(__m256 _v, int i = 0);
 #endif // __AVX__
     void fill(__m128 _v);
     void fill(__m128i _v);
@@ -132,13 +131,16 @@ public:
 #if __mips_msa
     void fill(v4f32 _v);
 #endif // __mips_msa
+#if __loongarch_sx
+    void fill(__m128 _v);
+#endif //__loongarch_sx
 #if __riscv_vector
     void fill(vfloat32m1_t _v);
     void fill(vuint16m1_t _v);
     void fill(vint8m1_t _v);
-#if __riscv_zfh
+#if __riscv_zvfh
     void fill(vfloat16m1_t _v);
-#endif // __riscv_zfh
+#endif // __riscv_zvfh
 #endif // __riscv_vector
     template<typename T>
     void fill(T v);
@@ -759,16 +761,6 @@ NCNN_EXPORT NCNN_FORCEINLINE float bfloat16_to_float32(unsigned short value)
     tmp.u = value << 16;
     return tmp.f;
 }
-#if __ARM_NEON
-NCNN_EXPORT NCNN_FORCEINLINE uint16x4_t vcvt_bf16_f32(float32x4_t _v)
-{
-    return vshrn_n_u32(vreinterpretq_u32_f32(_v), 16);
-}
-NCNN_EXPORT NCNN_FORCEINLINE float32x4_t vcvt_f32_bf16(uint16x4_t _v)
-{
-    return vreinterpretq_f32_u32(vshll_n_u16(_v, 16));
-}
-#endif // __ARM_NEON
 
 // mat process
 enum BorderType
@@ -913,48 +905,16 @@ NCNN_FORCEINLINE void Mat::fill(float _v)
     int size = (int)total();
     float* ptr = (float*)data;
 
-#if __ARM_NEON
-    int nn = size >> 2;
-    int remain = size - (nn << 2);
-#else
-    int remain = size;
-#endif // __ARM_NEON
-
+    int i = 0;
 #if __ARM_NEON
     float32x4_t _c = vdupq_n_f32(_v);
-#if __aarch64__
-    if (nn > 0)
+    for (; i + 3 < size; i += 4)
     {
-        asm volatile(
-            "0:                             \n"
-            "subs       %w0, %w0, #1        \n"
-            "st1        {%4.4s}, [%1], #16  \n"
-            "bne        0b                  \n"
-            : "=r"(nn), // %0
-            "=r"(ptr) // %1
-            : "0"(nn),
-            "1"(ptr),
-            "w"(_c) // %4
-            : "cc", "memory");
+        vst1q_f32(ptr, _c);
+        ptr += 4;
     }
-#else
-    if (nn > 0)
-    {
-        asm volatile(
-            "0:                             \n"
-            "subs       %0, #1              \n"
-            "vst1.f32   {%e4-%f4}, [%1 :128]!\n"
-            "bne        0b                  \n"
-            : "=r"(nn), // %0
-            "=r"(ptr) // %1
-            : "0"(nn),
-            "1"(ptr),
-            "w"(_c) // %4
-            : "cc", "memory");
-    }
-#endif // __aarch64__
 #endif // __ARM_NEON
-    for (; remain > 0; remain--)
+    for (; i < size; i++)
     {
         *ptr++ = _v;
     }
@@ -965,48 +925,16 @@ NCNN_FORCEINLINE void Mat::fill(int _v)
     int size = (int)total();
     int* ptr = (int*)data;
 
-#if __ARM_NEON
-    int nn = size >> 2;
-    int remain = size - (nn << 2);
-#else
-    int remain = size;
-#endif // __ARM_NEON
-
+    int i = 0;
 #if __ARM_NEON
     int32x4_t _c = vdupq_n_s32(_v);
-#if __aarch64__
-    if (nn > 0)
+    for (; i + 3 < size; i += 4)
     {
-        asm volatile(
-            "0:                             \n"
-            "subs       %w0, %w0, #1        \n"
-            "st1        {%4.4s}, [%1], #16  \n"
-            "bne        0b                  \n"
-            : "=r"(nn), // %0
-            "=r"(ptr) // %1
-            : "0"(nn),
-            "1"(ptr),
-            "w"(_c) // %4
-            : "cc", "memory");
+        vst1q_s32(ptr, _c);
+        ptr += 4;
     }
-#else
-    if (nn > 0)
-    {
-        asm volatile(
-            "0:                             \n"
-            "subs       %0, #1              \n"
-            "vst1.s32   {%e4-%f4}, [%1 :128]!\n"
-            "bne        0b                  \n"
-            : "=r"(nn), // %0
-            "=r"(ptr) // %1
-            : "0"(nn),
-            "1"(ptr),
-            "w"(_c) // %4
-            : "cc", "memory");
-    }
-#endif // __aarch64__
 #endif // __ARM_NEON
-    for (; remain > 0; remain--)
+    for (; i < size; i++)
     {
         *ptr++ = _v;
     }
@@ -1035,6 +963,7 @@ NCNN_FORCEINLINE void Mat::fill(uint16x4_t _v)
     }
 }
 
+#if !defined(_MSC_VER)
 NCNN_FORCEINLINE void Mat::fill(int32x4_t _v)
 {
     int size = (int)total();
@@ -1045,6 +974,7 @@ NCNN_FORCEINLINE void Mat::fill(int32x4_t _v)
         ptr += 4;
     }
 }
+#endif
 
 NCNN_FORCEINLINE void Mat::fill(int32x4_t _v0, int32x4_t _v1)
 {
@@ -1058,6 +988,7 @@ NCNN_FORCEINLINE void Mat::fill(int32x4_t _v0, int32x4_t _v1)
     }
 }
 #if __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
+#if !defined(_MSC_VER)
 NCNN_FORCEINLINE void Mat::fill(float16x4_t _v)
 {
     int size = (int)total();
@@ -1079,6 +1010,7 @@ NCNN_FORCEINLINE void Mat::fill(float16x8_t _v)
         ptr += 8;
     }
 }
+#endif
 #endif // __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
 #endif // __ARM_NEON
 
@@ -1096,8 +1028,11 @@ NCNN_FORCEINLINE void Mat::fill(__m512 _v)
     }
 }
 #endif // __AVX512F__
-NCNN_FORCEINLINE void Mat::fill(__m256 _v)
+NCNN_FORCEINLINE void Mat::fill(__m256 _v, int _i)
 {
+    // old gcc cannot overload __m128 and __m256 type
+    // add a dummy int parameter for different mangled function symbol
+    (void)_i;
     int size = (int)total();
     float* ptr = (float*)data;
     for (int i = 0; i < size; i++)
@@ -1117,7 +1052,6 @@ NCNN_FORCEINLINE void Mat::fill(__m128 _v)
         ptr += 4;
     }
 }
-
 NCNN_FORCEINLINE void Mat::fill(__m128i _v)
 {
     int size = (int)total();
@@ -1143,17 +1077,30 @@ NCNN_FORCEINLINE void Mat::fill(v4f32 _v)
 }
 #endif // __mips_msa
 
+#if __loongarch_sx
+NCNN_FORCEINLINE void Mat::fill(__m128 _v)
+{
+    int size = (int)total();
+    float* ptr = (float*)data;
+    for (int i = 0; i < size; i++)
+    {
+        __lsx_vst(_v, ptr, 0);
+        ptr += 4;
+    }
+}
+#endif // __loongarch_sx
+
 #if __riscv_vector
 NCNN_FORCEINLINE void Mat::fill(vfloat32m1_t _v)
 {
     const int packn = cpu_riscv_vlenb() / 4;
-    const word_type vl = vsetvl_e32m1(packn);
+    const size_t vl = __riscv_vsetvl_e32m1(packn);
 
     int size = (int)total();
     float* ptr = (float*)data;
     for (int i = 0; i < size; i++)
     {
-        vse32_v_f32m1(ptr, _v, vl);
+        __riscv_vse32_v_f32m1(ptr, _v, vl);
         ptr += packn;
     }
 }
@@ -1161,13 +1108,13 @@ NCNN_FORCEINLINE void Mat::fill(vfloat32m1_t _v)
 NCNN_FORCEINLINE void Mat::fill(vuint16m1_t _v)
 {
     const int packn = cpu_riscv_vlenb() / 2;
-    const word_type vl = vsetvl_e16m1(packn);
+    const size_t vl = __riscv_vsetvl_e16m1(packn);
 
     int size = (int)total();
     unsigned short* ptr = (unsigned short*)data;
     for (int i = 0; i < size; i++)
     {
-        vse16_v_u16m1(ptr, _v, vl);
+        __riscv_vse16_v_u16m1(ptr, _v, vl);
         ptr += packn;
     }
 }
@@ -1175,31 +1122,31 @@ NCNN_FORCEINLINE void Mat::fill(vuint16m1_t _v)
 NCNN_FORCEINLINE void Mat::fill(vint8m1_t _v)
 {
     const int packn = cpu_riscv_vlenb() / 1;
-    const word_type vl = vsetvl_e8m1(packn);
+    const size_t vl = __riscv_vsetvl_e8m1(packn);
 
     int size = (int)total();
     signed char* ptr = (signed char*)data;
     for (int i = 0; i < size; i++)
     {
-        vse8_v_i8m1(ptr, _v, vl);
+        __riscv_vse8_v_i8m1(ptr, _v, vl);
         ptr += packn;
     }
 }
-#if __riscv_zfh
+#if __riscv_zvfh
 NCNN_FORCEINLINE void Mat::fill(vfloat16m1_t _v)
 {
     const int packn = cpu_riscv_vlenb() / 2;
-    const word_type vl = vsetvl_e16m1(packn);
+    const size_t vl = __riscv_vsetvl_e16m1(packn);
 
     int size = (int)total();
     __fp16* ptr = (__fp16*)data;
     for (int i = 0; i < size; i++)
     {
-        vse16_v_f16m1(ptr, _v, vl);
+        __riscv_vse16_v_f16m1(ptr, _v, vl);
         ptr += packn;
     }
 }
-#endif // __riscv_zfh
+#endif // __riscv_zvfh
 #endif // __riscv_vector
 
 template<typename T>

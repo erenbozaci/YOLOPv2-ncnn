@@ -1,0 +1,17 @@
+build/
+/build
+build/*
+*/build/
+build-*/
+
+
+*.o
+*.so
+*.a
+*.lib
+*.dll
+*.exe
+
+.vscode/
+.idea/
+*.user
