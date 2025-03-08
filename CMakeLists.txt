@@ -40,7 +40,6 @@ set(GLSLANG_LIBS
     libOSDependent.a
     libOGLCompiler.a
     libSPIRV.a
-    libHLSL.a
     libglslang-default-resource-limits.a
 )
 
